@@ -16,6 +16,11 @@ class Image
    */
   public $resource;
 
+  /**
+   * @var \Intervention\Image\ImageManager
+   */
+  public $imageManager;
+
   // /**
   //  * @var resource
   //  */
@@ -23,16 +28,20 @@ class Image
 
   /**
    * @param string $path
+   * @param \Intervention\Image\ImageManager $imageManager
    * @throws FileNotFoundException
    * @return void
    */
-  public function __construct($path)
+  public function __construct($path, &$imageManager)
   {
     $this->path = urldecode($path);
 
     if (! file_exists($this->path) || ! is_readable($this->path)) {
       throw new FileNotFoundException('The image doesn\'t exist');
     }
+
+    $this->imageManager = $imageManager;
+    $this->resource = $this->imageManager->make($this->path);
   }
 
   // /**

@@ -49,8 +49,8 @@ class Imagery
       throw new ConfigException('The cache dir does not exist.');
     }
 
-    $this->image = new Image("$srcDir/$path");
     $this->imageManager = new ImageManager();
+    $this->image = new Image("$srcDir/$path", $this->imageManager);
     $this->path = $path;
     $this->cacheDir = $cacheDir;
   }
@@ -61,9 +61,9 @@ class Imagery
   }
 
   /**
-   * @param int $quality
+   * @param array $options
    */
-  public function compress($quality)
+  public function compress($options = [])
   {
     $cachePath = $this->getCachePath();
     $cachePathDir = dirname($cachePath);
@@ -72,8 +72,11 @@ class Imagery
       throw new SystemException('The cache directory could not be created: ' . $cachePathDir);
     }
 
-    $this->image->resource = $this->imageManager->make($this->image->path);
-    $this->image->resource->save($cachePath, $quality);
+    if (isset($options['limitColors'])) {
+      $this->image->resource->limitColors($options['limitColors'][0], $options['limitColors'][1]);
+    }
+
+    $this->image->resource->save($cachePath, $options['quality'] ?? 90);
   }
 
   public function response()
