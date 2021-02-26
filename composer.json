@@ -1,0 +1,25 @@
+{
+    "name": "jrdev/imagery",
+    "description": "Compress images on-the-fly",
+    "type": "project",
+    "license": "ISC",
+    "minimum-stability": "stable",
+    "authors": [
+        {
+            "name": "Jose Robinson",
+            "email": "jrobinsonc@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=7.2.0",
+        "intervention/image": "^2.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "JRDev\\Imagery\\": "src"
+        },
+        "files": [
+            "src/functions.php"
+        ]
+    }
+}
