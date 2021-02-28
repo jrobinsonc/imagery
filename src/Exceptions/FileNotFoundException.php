@@ -2,6 +2,9 @@
 
 namespace JRDev\Imagery\Exceptions;
 
-use RuntimeException;
-
-class FileNotFoundException extends RuntimeException {}
+/**
+ * If the specified file is not found.
+ */
+class FileNotFoundException extends AbstractException
+{
+}

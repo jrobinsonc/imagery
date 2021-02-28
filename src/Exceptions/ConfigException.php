@@ -2,6 +2,9 @@
 
 namespace JRDev\Imagery\Exceptions;
 
-use LogicException;
-
-class ConfigException extends LogicException {}
+/**
+ * For a bad configuration of the tool.
+ */
+class ConfigException extends AbstractException
+{
+}

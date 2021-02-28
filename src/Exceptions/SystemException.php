@@ -2,6 +2,9 @@
 
 namespace JRDev\Imagery\Exceptions;
 
-use RuntimeException;
-
-class SystemException extends RuntimeException {}
+/**
+ * For issues with the environment (e.g., not having permissions to write on disk).
+ */
+class SystemException extends AbstractException
+{
+}

@@ -2,8 +2,8 @@
 
 namespace JRDev\Imagery;
 
-use Drupal\Core\Config\ConfigException;
 use JRDev\Imagery\Exceptions\InputException;
+use JRDev\Imagery\Exceptions\ConfigException;
 use JRDev\Imagery\Image;
 use Intervention\Image\ImageManager;
 use JRDev\Imagery\Exceptions\SystemException;
@@ -11,78 +11,72 @@ use JRDev\Imagery\Exceptions\SystemException;
 class Imagery
 {
   /**
-   * @var \JRDev\Imagery\Image
-   */
-  public $image;
-
-  /**
    * @var \Intervention\Image\ImageManager
    */
-  public $imageManager;
+    protected $imageManager;
 
   /**
    * @var string
    */
-  public $cacheDir;
+    protected $cacheDir;
 
   /**
    * @var string
    */
-  public $path;
+    protected $srcDir;
 
   /**
-   * @param mixed $path
    * @param string $srcDir
    * @param string $cacheDir
+   * @param array<string, mixed> $options
    */
-  public function __construct($path, $srcDir, $cacheDir)
-  {
-    if (empty($path)) {
-      throw new InputException('The image path should not be empty.');
+    public function __construct($srcDir, $cacheDir, $options = [])
+    {
+        $this->srcDir = (string) realpath($srcDir);
+
+        if (! is_dir($this->srcDir) || ! is_readable($this->srcDir)) {
+            throw new ConfigException('The source dir does not exist or is not readable.');
+        }
+
+        $this->cacheDir = (string) realpath($cacheDir);
+
+        if (! is_dir($this->cacheDir) || ! is_writable($this->cacheDir)) {
+            throw new ConfigException('The cache dir does not exist or is not writable.');
+        }
+
+        $this->imageManager = new ImageManager(
+            $this->parseOptions($options)
+        );
     }
 
-    if (! is_dir($srcDir)) {
-      throw new ConfigException('The source dir does not exist.');
+    /**
+     * @param string $path
+     * @return \JRDev\Imagery\Image
+     */
+    public function load($path)
+    {
+        return new Image($this->srcDir, $this->cacheDir, $path, $this->imageManager);
     }
-
-    if (empty($cacheDir)) {
-      throw new ConfigException('The cache dir does not exist.');
-    }
-
-    $this->imageManager = new ImageManager();
-    $this->image = new Image("$srcDir/$path", $this->imageManager);
-    $this->path = $path;
-    $this->cacheDir = $cacheDir;
-  }
-
-  public function getCachePath()
-  {
-    return "$this->cacheDir/$this->path";
-  }
 
   /**
-   * @param array $options
+   * @param array<string, mixed> $options
+   * @return array<string, mixed>
    */
-  public function compress($options = [])
-  {
-    $cachePath = $this->getCachePath();
-    $cachePathDir = dirname($cachePath);
+    protected function parseOptions($options)
+    {
+        $output = $options;
 
-    if (! is_dir($cachePathDir) && ! mkdir($cachePathDir, 0755, true)) {
-      throw new SystemException('The cache directory could not be created: ' . $cachePathDir);
+        if (isset($output['driver']) && $output['driver'] === 'auto') {
+            unset($output['driver']);
+
+            foreach (['imagick', 'gd'] as $lib) {
+                if (extension_loaded($lib)) {
+                    $output['driver'] = $lib;
+                    break;
+                }
+            }
+        }
+
+        return $output;
     }
-
-    if (isset($options['limitColors'])) {
-      $this->image->resource->limitColors($options['limitColors'][0], $options['limitColors'][1]);
-    }
-
-    $this->image->resource->save($cachePath, $options['quality'] ?? 90);
-  }
-
-  public function response()
-  {
-    header('Content-type: ' . $this->imageManager->make($this->getCachePath())->mime());
-    header('X-Imagery: ' . time());
-    readfile($this->getCachePath());
-  }
 }

@@ -3,100 +3,144 @@
 namespace JRDev\Imagery;
 
 use JRDev\Imagery\Exceptions\FileNotFoundException;
+use JRDev\Imagery\Exceptions\SystemException;
 
 class Image
 {
-  /**
-   * @var string
-   */
-  public $path;
+    /**
+     * @var string
+     */
+    protected $path;
 
-  /**
-   * @var \Intervention\Image\Image
-   */
-  public $resource;
+    /**
+     * @var string
+     */
+    protected $srcDir;
 
-  /**
-   * @var \Intervention\Image\ImageManager
-   */
-  public $imageManager;
+    /**
+     * @var string
+     */
+    protected $cacheDir;
 
-  // /**
-  //  * @var resource
-  //  */
-  // protected $tempFile;
+    /**
+     * @var \Intervention\Image\Image
+     */
+    protected $lib;
 
-  /**
-   * @param string $path
-   * @param \Intervention\Image\ImageManager $imageManager
-   * @throws FileNotFoundException
-   * @return void
-   */
-  public function __construct($path, &$imageManager)
-  {
-    $this->path = urldecode($path);
+    /**
+     * @var array<string, mixed>
+     */
+    protected $data;
 
-    if (! file_exists($this->path) || ! is_readable($this->path)) {
-      throw new FileNotFoundException('The image doesn\'t exist');
+    /**
+     * @param string $srcDir
+     * @param string $cacheDir
+     * @param string $path
+     * @param \Intervention\Image\ImageManager $imageManager
+     * @throws \JRDev\Imagery\Exceptions\FileNotFoundException
+     * @return void
+     */
+    public function __construct($srcDir, $cacheDir, $path, &$imageManager)
+    {
+        $this->srcDir = $srcDir;
+        $this->cacheDir = $cacheDir;
+        $this->path = $path;
+
+        $this->parseImage();
+
+        $this->lib = $imageManager->make($this->data['fullPath']);
     }
 
-    $this->imageManager = $imageManager;
-    $this->resource = $this->imageManager->make($this->path);
-  }
+    /**
+     * @return void
+     */
+    public function __destruct()
+    {
+        $this->lib->destroy();
+    }
 
-  // /**
-  //  * @return void
-  //  */
-  // public function __destruct()
-  // {
-  //   $this->closeResources();
-  // }
+    /**
+     * @param string $varName
+     * @return mixed
+     */
+    public function __get($varName)
+    {
+        return $this->data[$varName] ?? null;
+    }
 
-  // /**
-  //  * Close used resources.
-  //  *
-  //  * @return void
-  //  */
-  // protected function closeResources()
-  // {
-  //   $resources = [$this->tempFile, $this->srcFile];
+    /**
+     * @return void
+     */
+    protected function parseImage()
+    {
+        $this->data['fullPath'] = "{$this->srcDir}/{$this->path}";
 
-  //   foreach ($resources as $resource) {
-  //     if (is_resource($resource)) {
-  //       fclose($resource);
-  //     }
-  //   }
-  // }
+        if (! file_exists($this->data['fullPath']) || ! is_readable($this->data['fullPath'])) {
+            throw new FileNotFoundException('Image doesn\'t exist or is not readable: ' . $this->path);
+        }
 
-  // /**
-  //  * @return resource
-  //  */
-  // public function getTempFile()
-  // {
-  //   if ($this->tempFile === null) {
-  //     $this->tempFile = tmpfile();
-  //   }
+        $this->data['cachePath'] = "{$this->cacheDir}/{$this->path}";
 
-  //   if ($this->tempFile === false) {
-  //     throw new SystemException('The temporary file could not be created.');
-  //   }
+        $info = pathinfo($this->data['fullPath']);
 
-  //   return $this->tempFile;
-  // }
+        $this->data['extension'] = $info['extension'] ?? '';
+    }
 
-  // /**
-  //  * @return resource
-  //  */
-  // public function getSrcFile()
-  // {
-  //   if ($this->srcFile === null) {
-  //     $this->srcFile = fopen($this->uri, 'r');
-  //   }
+    /**
+     * @param array<string, mixed> $options
+     * @return void
+     */
+    public function process($options = [])
+    {
+        $cachePathDir = dirname($this->data['cachePath']);
 
-  //   if ($this->srcFile === false) {
-  //     throw new SystemException('The source file is not readable.');
-  //   }
+        if (! is_dir($cachePathDir) && ! mkdir($cachePathDir, 0755, true)) {
+            throw new SystemException('Directory could not be created: ' . $cachePathDir);
+        }
 
-  //   return $this->srcFile;
-  // }
+        $filters = [
+            'limitColors',
+            'crop',
+            'widen',
+            'heighten',
+            'fit',
+            'resize',
+        ];
+
+        foreach ($filters as $key) {
+            if (empty($options[$key])) {
+                continue;
+            }
+
+            $data = $options[$key];
+
+            if (! is_array($data)) {
+                $data = [$data];
+            }
+
+            call_user_func_array([$this->lib, $key], $data);
+        }
+
+        $quality = $options['quality'] ?? 100;
+
+        $this->lib->save($this->data['cachePath'], $quality);
+    }
+
+    /**
+     * @param array<string, string> $headers
+     * @return void
+     */
+    public function response($headers = [])
+    {
+        // Date when the image was generated.
+        $headers['X-Imagery'] = date('c');
+        $headers['Content-type'] = $this->lib->mime();
+        $headers['Content-Length'] = filesize($this->data['cachePath']);
+
+        foreach ($headers as $key => $value) {
+            header(sprintf('%s: %s', $key, $value));
+        }
+
+        readfile($this->data['cachePath']);
+    }
 }
