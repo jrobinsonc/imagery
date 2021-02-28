@@ -99,12 +99,12 @@ class Image
         }
 
         $filters = [
-            'limitColors',
-            'crop',
+            'resize',
             'widen',
             'heighten',
             'fit',
-            'resize',
+            'crop',
+            'limitColors',
         ];
 
         foreach ($filters as $key) {
