@@ -4,6 +4,7 @@ namespace JRDev\Imagery;
 
 use JRDev\Imagery\Exceptions\FileNotFoundException;
 use JRDev\Imagery\Exceptions\SystemException;
+use JRDev\Imagery\Exceptions\InputException;
 
 class Image
 {
@@ -56,6 +57,10 @@ class Image
      */
     public function __destruct()
     {
+        if (is_null($this->lib)) {
+            return;
+        }
+
         $this->lib->destroy();
     }
 
@@ -73,17 +78,87 @@ class Image
      */
     protected function parseImage()
     {
-        $this->data['fullPath'] = "{$this->srcDir}/{$this->path}";
+        $ds = DIRECTORY_SEPARATOR;
+
+        $this->data['fullPath'] = sprintf(
+            '%s%s%s',
+            rtrim($this->srcDir, $ds),
+            $ds,
+            ltrim($this->path, $ds)
+        );
 
         if (! file_exists($this->data['fullPath']) || ! is_readable($this->data['fullPath'])) {
             throw new FileNotFoundException('Image doesn\'t exist or is not readable: ' . $this->path);
         }
 
-        $this->data['cachePath'] = "{$this->cacheDir}/{$this->path}";
+        $this->data['cachePath'] = sprintf(
+            '%s%s%s',
+            rtrim($this->cacheDir, $ds),
+            $ds,
+            ltrim($this->path, $ds)
+        );
 
         $info = pathinfo($this->data['fullPath']);
 
         $this->data['extension'] = $info['extension'] ?? '';
+    }
+
+    protected function parseFilterCustomArg($optionName, $array)
+    {
+        if (! in_array($optionName, $array)) {
+            return null;
+        }
+
+        switch ($optionName) {
+            case 'upsize':
+                return function($constraint){ $constraint->upsize(); };
+                break;
+        }
+
+        return null;
+    }
+
+    /**
+     * Builds the arguments needed to call the method of the image manipulation library.
+     *
+     * @param string $filterName
+     * @param array $params
+     * @return array
+     */
+    protected function buildFilterArgs($filterName, $params)
+    {
+        $cbParams = [];
+
+        switch ($filterName) {
+            case 'widen': // http://image.intervention.io/api/widen
+                // width
+                $cbParams[0] = (int) $params[0] ?? 0;
+
+                // callback
+                $cbParams[1] = $this->parseFilterCustomArg('upsize', $params[1] ?? []);
+                break;
+
+            case 'heighten': // http://image.intervention.io/api/heighten
+                // height
+                $cbParams[0] = (int) $params[0] ?? 0;
+
+                // callback
+                $cbParams[1] = $this->parseFilterCustomArg('upsize', $params[1] ?? []);
+                break;
+
+            case 'limitColors': // http://image.intervention.io/api/limitColors
+                // count
+                $cbParams[0] = (int) $params[0] ?? 0;
+
+                // matte
+                $cbParams[1] = $params[1] ?? null;
+                break;
+
+            default:
+                throw new InputException('Unknown filter: ' . $filterName);
+        }
+
+        return $cbParams;
     }
 
     /**
@@ -107,18 +182,15 @@ class Image
             'limitColors',
         ];
 
-        foreach ($filters as $key) {
-            if (empty($options[$key])) {
+        foreach ($filters as $filterName) {
+            if (empty($options[$filterName])) {
                 continue;
             }
 
-            $data = $options[$key];
+            $filterMethodCb = [$this->lib, $filterName];
+            $filterMethodArgs = $this->buildFilterArgs($filterName, $options[$filterName]);
 
-            if (! is_array($data)) {
-                $data = [$data];
-            }
-
-            call_user_func_array([$this->lib, $key], $data);
+            call_user_func_array($filterMethodCb, $filterMethodArgs);
         }
 
         $quality = $options['quality'] ?? 100;
